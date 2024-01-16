@@ -3,7 +3,8 @@ on:
   push:
     branches:
       - main
-    paths: ./ecs
+    paths:
+      - 'ecs/**'
   workflow_dispatch:
 jobs:
   tf_check:

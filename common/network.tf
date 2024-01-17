@@ -1,28 +1,3 @@
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "5.31.0"
-    }
-  }
-  required_version = ">=1.6.6"
-
-  backend "s3" {
-    bucket = "colour-in-deploy"
-    key    = "ecs"
-  }
-}
-
-provider "aws" {
-  region = var.region
-
-  default_tags {
-    tags = {
-      project = var.project_name
-    }
-  }
-}
-
 # Network
 
 # VPC
@@ -48,6 +23,8 @@ resource "aws_internet_gateway_attachment" "internet_gateway_attachment" {
   internet_gateway_id = aws_internet_gateway.internet_gateway.id
   vpc_id              = aws_vpc.vpc.id
 }
+
+### Public ###
 
 # Public Route Table
 resource "aws_route_table" "public_route_table" {
@@ -82,6 +59,8 @@ resource "aws_route_table_association" "public_subnet_rt_assoc" {
   subnet_id      = element(aws_subnet.public_subnet.*.id, count.index)
   route_table_id = aws_route_table.public_route_table.id
 }
+
+### Private ###
 
 # Private Route Table
 resource "aws_route_table" "private_route_table" {
@@ -167,32 +146,4 @@ resource "aws_route_table_association" "private_subnet_rt_assoc" {
   count          = length(aws_subnet.private_subnet.*.id)
   subnet_id      = element(aws_subnet.private_subnet.*.id, count.index)
   route_table_id = aws_route_table.private_route_table.id
-}
-
-# Frontend ECR Repo
-resource "aws_ecr_repository" "ecr_repo_frontend" {
-  name                 = "${var.project_name}-frontend"
-  image_tag_mutability = "IMMUTABLE"
-
-  image_scanning_configuration {
-    scan_on_push = false
-  }
-
-  lifecycle {
-    prevent_destroy = true
-  }
-}
-
-# Backend ECR Repo
-resource "aws_ecr_repository" "ecr_repo_backend" {
-  name                 = "${var.project_name}-backend"
-  image_tag_mutability = "IMMUTABLE"
-
-  image_scanning_configuration {
-    scan_on_push = false
-  }
-
-  lifecycle {
-    prevent_destroy = true
-  }
 }

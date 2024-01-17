@@ -5,12 +5,19 @@ resource "aws_security_group" "alb_sg_backend" {
   description = "ALB SG backend"
   vpc_id      = aws_vpc.vpc.id
 
+  # ingress {
+  #   description     = "Allow frontend ECS Service"
+  #   from_port       = var.app_port
+  #   to_port         = var.app_port
+  #   protocol        = "tcp"
+  #   security_groups = [aws_security_group.service_sg_frontend.id]
+  # }
   ingress {
-    description     = "Allow frontend ECS Service"
-    from_port       = var.container_port
-    to_port         = var.container_port
-    protocol        = "tcp"
-    security_groups = [aws_security_group.service_sg_frontend.id]
+    description = "Allow HTTP to ALB on ${var.app_port}"
+    from_port   = 0
+    to_port     = var.app_port
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
   egress {
     from_port   = 0
@@ -30,7 +37,7 @@ resource "aws_security_group" "service_sg_backend" {
   ingress {
     description     = "Allow backend ALB"
     from_port       = 0
-    to_port         = var.container_port
+    to_port         = var.app_port
     protocol        = "tcp"
     security_groups = [aws_security_group.alb_sg_backend.id]
   }
@@ -44,12 +51,11 @@ resource "aws_security_group" "service_sg_backend" {
 
 # Task
 resource "aws_ecs_task_definition" "ecs_task_def_backend" {
-  depends_on               = [aws_iam_role.ecs_execution_role]
   family                   = "${var.project_name}-backend"
   requires_compatibilities = ["FARGATE"]
   cpu                      = 256
   memory                   = 512
-  execution_role_arn       = aws_iam_role.ecs_execution_role.arn
+  execution_role_arn       = data.aws_iam_role.ecs_execution_role.arn
   network_mode             = "awsvpc"
 
   container_definitions = jsonencode([
@@ -59,11 +65,10 @@ resource "aws_ecs_task_definition" "ecs_task_def_backend" {
       cpu       = 256
       memory    = 512
       essential = true
-      command   = ["-p", "${var.container_port}:80"]
+      command   = ["-p", "${var.app_port}:80"]
       portMappings = [
         {
-          containerPort = var.container_port,
-          hostPort      = var.container_port
+          containerPort = var.app_port
         }
       ]
       logConfiguration = {
@@ -105,7 +110,37 @@ resource "aws_ecs_service" "ecs_service_backend" {
   load_balancer {
     target_group_arn = aws_lb_target_group.lb_target_group_backend.arn
     container_name   = "${var.project_name}-backend"
-    container_port   = var.container_port
+    container_port   = var.app_port
+  }
+
+  lifecycle {
+    ignore_changes = all
+  }
+}
+
+# Service Test
+resource "aws_ecs_service" "ecs_service_backend_test" {
+  depends_on      = [aws_ecs_cluster.ecs_cluster, aws_subnet.private_subnet, aws_lb_target_group.lb_target_group_backend]
+  name            = "${var.project_name}-backend-test"
+  cluster         = aws_ecs_cluster.ecs_cluster.id
+  desired_count   = 0
+  task_definition = aws_ecs_task_definition.ecs_task_def_backend.arn
+  launch_type     = "FARGATE"
+
+  network_configuration {
+    assign_public_ip = false
+    subnets          = aws_subnet.private_subnet.*.id
+    security_groups  = [aws_security_group.service_sg_backend.id]
+  }
+
+  deployment_controller {
+    type = "ECS"
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.lb_target_group_backend_test.arn
+    container_name   = "${var.project_name}-backend"
+    container_port   = var.app_port
   }
 
   lifecycle {
@@ -123,11 +158,12 @@ resource "aws_lb" "lb_backend" {
   internal           = true
 }
 
+# TG
 resource "aws_lb_target_group" "lb_target_group_backend" {
   depends_on  = [aws_vpc.vpc]
   name        = "${var.project_name}-backend"
   target_type = "ip"
-  port        = var.container_port
+  port        = var.app_port
   protocol    = "HTTP"
   vpc_id      = aws_vpc.vpc.id
 
@@ -137,7 +173,29 @@ resource "aws_lb_target_group" "lb_target_group_backend" {
     interval            = 30
     matcher             = 200
     path                = "/docs"
-    port                = var.container_port
+    port                = var.app_port
+    protocol            = "HTTP"
+    timeout             = 6
+    unhealthy_threshold = 3
+  }
+}
+
+# TG Test
+resource "aws_lb_target_group" "lb_target_group_backend_test" {
+  depends_on  = [aws_vpc.vpc]
+  name        = "${var.project_name}-backend-test"
+  target_type = "ip"
+  port        = var.app_port
+  protocol    = "HTTP"
+  vpc_id      = aws_vpc.vpc.id
+
+  health_check {
+    enabled             = true
+    healthy_threshold   = 3
+    interval            = 30
+    matcher             = 200
+    path                = "/docs"
+    port                = var.app_port
     protocol            = "HTTP"
     timeout             = 6
     unhealthy_threshold = 3
@@ -146,12 +204,28 @@ resource "aws_lb_target_group" "lb_target_group_backend" {
 
 resource "aws_lb_listener" "lb_listener_backend" {
   depends_on        = [aws_lb_target_group.lb_target_group_backend]
-  port              = var.container_port
+  port              = var.app_port
   protocol          = "HTTP"
   load_balancer_arn = aws_lb.lb_backend.arn
 
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.lb_target_group_backend.arn
+  }
+}
+
+resource "aws_lb_listener_rule" "listener_rule_backend_experimental" {
+  listener_arn = aws_lb_listener.lb_listener_backend.arn
+  priority     = 100
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.lb_target_group_backend_test.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/experimental/*"]
+    }
   }
 }

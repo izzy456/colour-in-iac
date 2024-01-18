@@ -5,19 +5,19 @@ resource "aws_security_group" "alb_sg_backend" {
   description = "ALB SG backend"
   vpc_id      = aws_vpc.vpc.id
 
-  # ingress {
-  #   description     = "Allow frontend ECS Service"
-  #   from_port       = var.app_port
-  #   to_port         = var.app_port
-  #   protocol        = "tcp"
-  #   security_groups = [aws_security_group.service_sg_frontend.id]
-  # }
   ingress {
-    description = "Allow HTTP to ALB on ${var.app_port}"
-    from_port   = 0
-    to_port     = var.app_port
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    description     = "Allow frontend ECS Service from port 8080"
+    from_port       = var.app_port
+    to_port         = var.app_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.service_sg_frontend.id]
+  }
+  ingress {
+    description     = "Allow frontend ECS Service from port 8081"
+    from_port       = 8081
+    to_port         = 8081
+    protocol        = "tcp"
+    security_groups = [aws_security_group.service_sg_frontend.id]
   }
   egress {
     from_port   = 0
@@ -36,7 +36,7 @@ resource "aws_security_group" "service_sg_backend" {
 
   ingress {
     description     = "Allow backend ALB"
-    from_port       = 0
+    from_port       = var.app_port
     to_port         = var.app_port
     protocol        = "tcp"
     security_groups = [aws_security_group.alb_sg_backend.id]
@@ -146,6 +146,10 @@ resource "aws_ecs_service" "ecs_service_backend_test" {
   lifecycle {
     ignore_changes = all
   }
+
+  tags = {
+    environment = "test"
+  }
 }
 
 # LB
@@ -200,6 +204,10 @@ resource "aws_lb_target_group" "lb_target_group_backend_test" {
     timeout             = 6
     unhealthy_threshold = 3
   }
+
+  tags = {
+    environment = "test"
+  }
 }
 
 resource "aws_lb_listener" "lb_listener_backend" {
@@ -214,18 +222,18 @@ resource "aws_lb_listener" "lb_listener_backend" {
   }
 }
 
-resource "aws_lb_listener_rule" "listener_rule_backend_experimental" {
-  listener_arn = aws_lb_listener.lb_listener_backend.arn
-  priority     = 100
+resource "aws_lb_listener" "lb_listener_backend_test" {
+  depends_on        = [aws_lb_target_group.lb_target_group_backend_test]
+  port              = 8081
+  protocol          = "HTTP"
+  load_balancer_arn = aws_lb.lb_backend.arn
 
-  action {
+  default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.lb_target_group_backend_test.arn
   }
 
-  condition {
-    path_pattern {
-      values = ["/experimental/*"]
-    }
+  tags = {
+    environment = "test"
   }
 }

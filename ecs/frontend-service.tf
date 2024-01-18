@@ -57,7 +57,7 @@ resource "aws_security_group" "service_sg_frontend" {
 
   ingress {
     description     = "Only allow ALB to ECS"
-    from_port       = 0
+    from_port       = var.app_port
     to_port         = var.app_port
     protocol        = "tcp"
     security_groups = var.cert_domain == "" ? [aws_security_group.alb_sg_frontend_no_cert.id] : [aws_security_group.alb_sg_frontend.id]
@@ -167,6 +167,10 @@ resource "aws_ecs_service" "ecs_service_frontend_test" {
   lifecycle {
     ignore_changes = all
   }
+
+  tags = {
+    environment = "test"
+  }
 }
 
 # LB
@@ -220,6 +224,10 @@ resource "aws_lb_target_group" "lb_target_group_frontend_test" {
     timeout             = 6
     unhealthy_threshold = 3
   }
+
+  tags = {
+    environment = "test"
+  }
 }
 
 data "aws_acm_certificate" "app_certificate" {
@@ -233,11 +241,17 @@ data "aws_route53_zone" "project_hosted_zone" {
 }
 
 resource "aws_route53_record" "app_record" {
-  zone_id = data.aws_route53_zone.project_hosted_zone[0].zone_id
-  name    = var.hosted_zone
-  type    = "A"
-  ttl     = 300
-  records = [aws_lb.lb_frontend.dns_name]
+  depends_on = [aws_lb.lb_frontend]
+  count      = "${var.cert_domain}" == "" ? 0 : 1
+  zone_id    = data.aws_route53_zone.project_hosted_zone[0].zone_id
+  name       = var.hosted_zone
+  type       = "A"
+
+  alias {
+    name                   = aws_lb.lb_frontend.dns_name
+    zone_id                = aws_lb.lb_frontend.zone_id
+    evaluate_target_health = true
+  }
 }
 
 resource "aws_lb_listener" "lb_listener_frontend_secure" {
@@ -270,6 +284,10 @@ resource "aws_lb_listener_rule" "listener_rule_experimental" {
     path_pattern {
       values = ["/experimental/*"]
     }
+  }
+
+  tags = {
+    environment = "test"
   }
 }
 
@@ -317,5 +335,9 @@ resource "aws_lb_listener_rule" "listener_rule_experimental_no_cert" {
     path_pattern {
       values = ["/experimental/*"]
     }
+  }
+
+  tags = {
+    environment = "test"
   }
 }

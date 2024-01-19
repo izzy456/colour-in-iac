@@ -29,7 +29,7 @@ resource "aws_security_group" "alb_sg_frontend" {
 
 resource "aws_security_group" "alb_sg_frontend_no_cert" {
   depends_on  = [aws_vpc.vpc]
-  name        = "${var.project_name}-frontend-alb-sg-test"
+  name        = "${var.project_name}-frontend-alb-sg-no-cert"
   description = "ALB SG frontend test"
   vpc_id      = aws_vpc.vpc.id
 
@@ -60,7 +60,7 @@ resource "aws_security_group" "service_sg_frontend" {
     from_port       = var.app_port
     to_port         = var.app_port
     protocol        = "tcp"
-    security_groups = var.cert_domain == "" ? [aws_security_group.alb_sg_frontend_no_cert.id] : [aws_security_group.alb_sg_frontend.id]
+    security_groups = var.domain_name == "" ? [aws_security_group.alb_sg_frontend_no_cert.id] : [aws_security_group.alb_sg_frontend.id]
   }
   egress {
     from_port   = 0
@@ -179,7 +179,7 @@ resource "aws_lb" "lb_frontend" {
   name               = "${var.project_name}-frontend-lb"
   load_balancer_type = "application"
   subnets            = aws_subnet.public_subnet.*.id
-  security_groups    = "${var.cert_domain}" == "" ? [aws_security_group.alb_sg_frontend_no_cert.id] : [aws_security_group.alb_sg_frontend.id]
+  security_groups    = "${var.domain_name}" == "" ? [aws_security_group.alb_sg_frontend_no_cert.id] : [aws_security_group.alb_sg_frontend.id]
 }
 
 # TG
@@ -231,20 +231,34 @@ resource "aws_lb_target_group" "lb_target_group_frontend_test" {
 }
 
 data "aws_acm_certificate" "app_certificate" {
-  count  = "${var.cert_domain}" == "" ? 0 : 1
-  domain = var.cert_domain
+  count  = "${var.domain_name}" == "" ? 0 : 1
+  domain = var.domain_name
 }
 
 data "aws_route53_zone" "project_hosted_zone" {
-  count = "${var.cert_domain}" == "" ? 0 : 1
-  name  = var.hosted_zone
+  count = "${var.domain_name}" == "" ? 0 : 1
+  name  = var.domain_name
 }
 
 resource "aws_route53_record" "app_record" {
   depends_on = [aws_lb.lb_frontend]
-  count      = "${var.cert_domain}" == "" ? 0 : 1
+  count      = "${var.domain_name}" == "" ? 0 : 1
   zone_id    = data.aws_route53_zone.project_hosted_zone[0].zone_id
-  name       = var.hosted_zone
+  name       = var.domain_name
+  type       = "A"
+
+  alias {
+    name                   = aws_lb.lb_frontend.dns_name
+    zone_id                = aws_lb.lb_frontend.zone_id
+    evaluate_target_health = true
+  }
+}
+
+resource "aws_route53_record" "app_record_www" {
+  depends_on = [aws_lb.lb_frontend]
+  count      = "${var.domain_name}" == "" ? 0 : 1
+  zone_id    = data.aws_route53_zone.project_hosted_zone[0].zone_id
+  name       = "www.${var.domain_name}"
   type       = "A"
 
   alias {
@@ -255,7 +269,7 @@ resource "aws_route53_record" "app_record" {
 }
 
 resource "aws_lb_listener" "lb_listener_frontend_secure" {
-  count             = "${var.cert_domain}" == "" ? 0 : 1
+  count             = "${var.domain_name}" == "" ? 0 : 1
   depends_on        = [aws_lb_target_group.lb_target_group_frontend]
   port              = 443
   protocol          = "HTTPS"
@@ -271,7 +285,7 @@ resource "aws_lb_listener" "lb_listener_frontend_secure" {
 }
 
 resource "aws_lb_listener_rule" "listener_rule_experimental" {
-  count        = "${var.cert_domain}" == "" ? 0 : 1
+  count        = "${var.domain_name}" == "" ? 0 : 1
   listener_arn = aws_lb_listener.lb_listener_frontend_secure[0].arn
   priority     = 100
 
@@ -282,7 +296,7 @@ resource "aws_lb_listener_rule" "listener_rule_experimental" {
 
   condition {
     path_pattern {
-      values = ["/experimental/*"]
+      values = ["/experimental"]
     }
   }
 
@@ -292,7 +306,7 @@ resource "aws_lb_listener_rule" "listener_rule_experimental" {
 }
 
 resource "aws_lb_listener" "lb_listener_frontend" {
-  count             = "${var.cert_domain}" == "" ? 0 : 1
+  count             = "${var.domain_name}" == "" ? 0 : 1
   depends_on        = [aws_lb.lb_frontend]
   port              = 80
   protocol          = "HTTP"
@@ -309,7 +323,7 @@ resource "aws_lb_listener" "lb_listener_frontend" {
 }
 
 resource "aws_lb_listener" "lb_listener_frontend_no_cert" {
-  count             = "${var.cert_domain}" == "" ? 1 : 0
+  count             = "${var.domain_name}" == "" ? 1 : 0
   depends_on        = [aws_lb.lb_frontend]
   port              = 80
   protocol          = "HTTP"
@@ -322,7 +336,7 @@ resource "aws_lb_listener" "lb_listener_frontend_no_cert" {
 }
 
 resource "aws_lb_listener_rule" "listener_rule_experimental_no_cert" {
-  count        = "${var.cert_domain}" == "" ? 1 : 0
+  count        = "${var.domain_name}" == "" ? 1 : 0
   listener_arn = aws_lb_listener.lb_listener_frontend_no_cert[0].arn
   priority     = 100
 
@@ -333,7 +347,7 @@ resource "aws_lb_listener_rule" "listener_rule_experimental_no_cert" {
 
   condition {
     path_pattern {
-      values = ["/experimental/*"]
+      values = ["/experimental"]
     }
   }
 

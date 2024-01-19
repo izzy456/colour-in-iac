@@ -16,14 +16,8 @@ variable "region" {
   nullable    = false
 }
 
-variable "cert_domain" {
-  description = "Domain on the certificate for the app (leave empty if none)"
-  type        = string
-  default     = ""
-}
-
-variable "hosted_zone" {
-  description = "The hosted zone for the project"
+variable "domain_name" {
+  description = "The domain name of the web app (e.g. example.com, requires setup of ACM cert for this domain and www. subdomain as well as Hosted Zone)"
   type        = string
   default     = ""
 }

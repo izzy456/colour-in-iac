@@ -6,10 +6,6 @@ resource "aws_ecr_repository" "ecr_repo_frontend" {
   image_scanning_configuration {
     scan_on_push = false
   }
-
-  # lifecycle {
-  #   prevent_destroy = true
-  # }
 }
 
 # Backend ECR Repo
@@ -20,8 +16,4 @@ resource "aws_ecr_repository" "ecr_repo_backend" {
   image_scanning_configuration {
     scan_on_push = false
   }
-
-  # lifecycle {
-  #   prevent_destroy = true
-  # }
 }

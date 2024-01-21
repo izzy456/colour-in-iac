@@ -1,0 +1,45 @@
+name: Apply Terraform Templates - ecs
+on:
+  workflow_dispatch:
+    inputs:
+      domain_name:
+        description: "The domain name of the web app (e.g. example.com, requires setup of ACM cert for this domain and www. subdomain as well as Hosted Zone)"
+        required: false
+        default: ""
+jobs:
+  tf_apply:
+    name: Apply Terraform Templates - ecs
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    defaults:
+      run:
+        shell: bash
+        working-directory: ./ecs
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Copy in common templates
+        run: cp -r ../common/. .
+
+      - name: Terraform Init
+        run: terraform init -backend-config="key=ecs" -backend-config="region=${{ vars.AWS_REGION }}"
+    
+      - name: Terraform Apply - no domain name
+        if: ${{ inputs.domain_name == '' }}
+        run: terraform apply -var "region=${{ vars.AWS_REGION }}" -auto-approve
+    
+      - name: Terraform Apply
+        if: ${{ inputs.domain_name != '' }}
+        run: terraform apply -var "region=${{ vars.AWS_REGION }}" -var "domain_name=${{ inputs.domain_name }}" -auto-approve

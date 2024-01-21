@@ -6,14 +6,14 @@ resource "aws_security_group" "alb_sg_backend" {
   vpc_id      = aws_vpc.vpc.id
 
   ingress {
-    description     = "Allow frontend ECS Service from port 8080"
+    description     = "Allow frontend ECS Service on port ${var.app_port}"
     from_port       = var.app_port
     to_port         = var.app_port
     protocol        = "tcp"
     security_groups = [aws_security_group.service_sg_frontend.id]
   }
   ingress {
-    description     = "Allow frontend ECS Service from port 8081"
+    description     = "Allow frontend ECS Service on port 8081"
     from_port       = 8081
     to_port         = 8081
     protocol        = "tcp"
@@ -35,7 +35,7 @@ resource "aws_security_group" "service_sg_backend" {
   vpc_id      = aws_vpc.vpc.id
 
   ingress {
-    description     = "Allow backend ALB"
+    description     = "Allow backend ALB on port ${var.app_port}"
     from_port       = var.app_port
     to_port         = var.app_port
     protocol        = "tcp"
@@ -49,9 +49,9 @@ resource "aws_security_group" "service_sg_backend" {
   }
 }
 
-# Task
-resource "aws_ecs_task_definition" "ecs_task_def_backend" {
-  family                   = "${var.project_name}-backend"
+# Prod Task
+resource "aws_ecs_task_definition" "ecs_task_def_backend_prod" {
+  family                   = "${var.project_name}-backend-prod"
   requires_compatibilities = ["FARGATE"]
   cpu                      = 256
   memory                   = 512
@@ -60,7 +60,7 @@ resource "aws_ecs_task_definition" "ecs_task_def_backend" {
 
   container_definitions = jsonencode([
     {
-      name      = "${var.project_name}-backend"
+      name      = "${var.project_name}-backend-prod"
       image     = "public.ecr.aws/nginx/nginx:stable-perl"
       cpu       = 256
       memory    = 512
@@ -77,7 +77,7 @@ resource "aws_ecs_task_definition" "ecs_task_def_backend" {
           awslogs-create-group  = "true",
           awslogs-group         = aws_cloudwatch_log_group.ecs_logs.name,
           awslogs-region        = var.region,
-          awslogs-stream-prefix = "${var.project_name}-task"
+          awslogs-stream-prefix = "ecs-backend-prod"
         }
       }
     }
@@ -88,13 +88,52 @@ resource "aws_ecs_task_definition" "ecs_task_def_backend" {
   }
 }
 
-# Service
-resource "aws_ecs_service" "ecs_service_backend" {
-  depends_on      = [aws_ecs_cluster.ecs_cluster, aws_subnet.private_subnet, aws_lb_target_group.lb_target_group_backend]
-  name            = "${var.project_name}-backend"
+# Test Task
+resource "aws_ecs_task_definition" "ecs_task_def_backend_test" {
+  family                   = "${var.project_name}-backend-test"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = 256
+  memory                   = 512
+  execution_role_arn       = data.aws_iam_role.ecs_execution_role.arn
+  network_mode             = "awsvpc"
+
+  container_definitions = jsonencode([
+    {
+      name      = "${var.project_name}-backend-test"
+      image     = "public.ecr.aws/nginx/nginx:stable-perl"
+      cpu       = 256
+      memory    = 512
+      essential = true
+      command   = ["-p", "${var.app_port}:80"]
+      portMappings = [
+        {
+          containerPort = var.app_port
+        }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-create-group  = "true",
+          awslogs-group         = aws_cloudwatch_log_group.ecs_logs.name,
+          awslogs-region        = var.region,
+          awslogs-stream-prefix = "ecs-backend-test"
+        }
+      }
+    }
+  ])
+
+  lifecycle {
+    ignore_changes = all
+  }
+}
+
+# Prod Service
+resource "aws_ecs_service" "ecs_service_backend_prod" {
+  depends_on      = [aws_ecs_cluster.ecs_cluster, aws_subnet.private_subnet, aws_lb_target_group.lb_target_group_backend_prod]
+  name            = "${var.project_name}-backend-prod"
   cluster         = aws_ecs_cluster.ecs_cluster.id
   desired_count   = 0
-  task_definition = aws_ecs_task_definition.ecs_task_def_backend.arn
+  task_definition = aws_ecs_task_definition.ecs_task_def_backend_prod.arn
   launch_type     = "FARGATE"
 
   network_configuration {
@@ -108,8 +147,8 @@ resource "aws_ecs_service" "ecs_service_backend" {
   }
 
   load_balancer {
-    target_group_arn = aws_lb_target_group.lb_target_group_backend.arn
-    container_name   = "${var.project_name}-backend"
+    target_group_arn = aws_lb_target_group.lb_target_group_backend_prod.arn
+    container_name   = "${var.project_name}-backend-prod"
     container_port   = var.app_port
   }
 
@@ -120,11 +159,11 @@ resource "aws_ecs_service" "ecs_service_backend" {
 
 # Service Test
 resource "aws_ecs_service" "ecs_service_backend_test" {
-  depends_on      = [aws_ecs_cluster.ecs_cluster, aws_subnet.private_subnet, aws_lb_target_group.lb_target_group_backend]
+  depends_on      = [aws_ecs_cluster.ecs_cluster, aws_subnet.private_subnet, aws_lb_target_group.lb_target_group_backend_test]
   name            = "${var.project_name}-backend-test"
   cluster         = aws_ecs_cluster.ecs_cluster.id
   desired_count   = 0
-  task_definition = aws_ecs_task_definition.ecs_task_def_backend.arn
+  task_definition = aws_ecs_task_definition.ecs_task_def_backend_test.arn
   launch_type     = "FARGATE"
 
   network_configuration {
@@ -139,7 +178,7 @@ resource "aws_ecs_service" "ecs_service_backend_test" {
 
   load_balancer {
     target_group_arn = aws_lb_target_group.lb_target_group_backend_test.arn
-    container_name   = "${var.project_name}-backend"
+    container_name   = "${var.project_name}-backend-test"
     container_port   = var.app_port
   }
 
@@ -162,10 +201,10 @@ resource "aws_lb" "lb_backend" {
   internal           = true
 }
 
-# TG
-resource "aws_lb_target_group" "lb_target_group_backend" {
+# Prod TG
+resource "aws_lb_target_group" "lb_target_group_backend_prod" {
   depends_on  = [aws_vpc.vpc]
-  name        = "${var.project_name}-backend"
+  name        = "${var.project_name}-backend-prod"
   target_type = "ip"
   port        = var.app_port
   protocol    = "HTTP"
@@ -210,15 +249,15 @@ resource "aws_lb_target_group" "lb_target_group_backend_test" {
   }
 }
 
-resource "aws_lb_listener" "lb_listener_backend" {
-  depends_on        = [aws_lb_target_group.lb_target_group_backend]
+resource "aws_lb_listener" "lb_listener_backend_prod" {
+  depends_on        = [aws_lb_target_group.lb_target_group_backend_prod]
   port              = var.app_port
   protocol          = "HTTP"
   load_balancer_arn = aws_lb.lb_backend.arn
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.lb_target_group_backend.arn
+    target_group_arn = aws_lb_target_group.lb_target_group_backend_prod.arn
   }
 }
 

@@ -30,11 +30,11 @@ resource "aws_security_group" "alb_sg_frontend" {
 resource "aws_security_group" "alb_sg_frontend_no_cert" {
   depends_on  = [aws_vpc.vpc]
   name        = "${var.project_name}-frontend-alb-sg-no-cert"
-  description = "ALB SG frontend test"
+  description = "ALB SG frontend no cert"
   vpc_id      = aws_vpc.vpc.id
 
   ingress {
-    description = "Allow all HTTP to ALB on ${var.app_port}"
+    description = "Allow all HTTP to ALB"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
@@ -56,11 +56,11 @@ resource "aws_security_group" "service_sg_frontend" {
   vpc_id      = aws_vpc.vpc.id
 
   ingress {
-    description     = "Only allow ALB to ECS"
+    description     = "Allow ALB to frontend ECS on port ${var.app_port}"
     from_port       = var.app_port
     to_port         = var.app_port
     protocol        = "tcp"
-    security_groups = var.domain_name == "" ? [aws_security_group.alb_sg_frontend_no_cert.id] : [aws_security_group.alb_sg_frontend.id]
+    security_groups = "${var.domain_name}" == "" ? [aws_security_group.alb_sg_frontend_no_cert.id] : [aws_security_group.alb_sg_frontend.id]
   }
   egress {
     from_port   = 0
@@ -70,9 +70,9 @@ resource "aws_security_group" "service_sg_frontend" {
   }
 }
 
-# Task
-resource "aws_ecs_task_definition" "ecs_task_def_frontend" {
-  family                   = "${var.project_name}-frontend"
+# Prod Task
+resource "aws_ecs_task_definition" "ecs_task_def_frontend_prod" {
+  family                   = "${var.project_name}-frontend-prod"
   requires_compatibilities = ["FARGATE"]
   cpu                      = 256
   memory                   = 512
@@ -81,7 +81,7 @@ resource "aws_ecs_task_definition" "ecs_task_def_frontend" {
 
   container_definitions = jsonencode([
     {
-      name      = "${var.project_name}-frontend"
+      name      = "${var.project_name}-frontend-prod"
       image     = "public.ecr.aws/nginx/nginx:stable-perl"
       cpu       = 256
       memory    = 512
@@ -98,7 +98,7 @@ resource "aws_ecs_task_definition" "ecs_task_def_frontend" {
           awslogs-create-group  = "true",
           awslogs-group         = aws_cloudwatch_log_group.ecs_logs.name,
           awslogs-region        = var.region,
-          awslogs-stream-prefix = "${var.project_name}-task"
+          awslogs-stream-prefix = "ecs-frontend-prod"
         }
       }
     }
@@ -109,13 +109,52 @@ resource "aws_ecs_task_definition" "ecs_task_def_frontend" {
   }
 }
 
-# Service
-resource "aws_ecs_service" "ecs_service_frontend" {
-  depends_on      = [aws_ecs_cluster.ecs_cluster, aws_subnet.private_subnet, aws_lb_target_group.lb_target_group_frontend]
-  name            = "${var.project_name}-frontend"
+# Test Task
+resource "aws_ecs_task_definition" "ecs_task_def_frontend_test" {
+  family                   = "${var.project_name}-frontend-test"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = 256
+  memory                   = 512
+  execution_role_arn       = data.aws_iam_role.ecs_execution_role.arn
+  network_mode             = "awsvpc"
+
+  container_definitions = jsonencode([
+    {
+      name      = "${var.project_name}-frontend-test"
+      image     = "public.ecr.aws/nginx/nginx:stable-perl"
+      cpu       = 256
+      memory    = 512
+      essential = true
+      command   = ["-p", "${var.app_port}:80"]
+      portMappings = [
+        {
+          containerPort = var.app_port
+        }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-create-group  = "true",
+          awslogs-group         = aws_cloudwatch_log_group.ecs_logs.name,
+          awslogs-region        = var.region,
+          awslogs-stream-prefix = "ecs-frontend-test"
+        }
+      }
+    }
+  ])
+
+  lifecycle {
+    ignore_changes = all
+  }
+}
+
+# Prod Service
+resource "aws_ecs_service" "ecs_service_frontend_prod" {
+  depends_on      = [aws_ecs_cluster.ecs_cluster, aws_subnet.private_subnet, aws_lb_target_group.lb_target_group_frontend_prod]
+  name            = "${var.project_name}-frontend-prod"
   cluster         = aws_ecs_cluster.ecs_cluster.id
   desired_count   = 0
-  task_definition = aws_ecs_task_definition.ecs_task_def_frontend.arn
+  task_definition = aws_ecs_task_definition.ecs_task_def_frontend_prod.arn
   launch_type     = "FARGATE"
 
   network_configuration {
@@ -129,8 +168,8 @@ resource "aws_ecs_service" "ecs_service_frontend" {
   }
 
   load_balancer {
-    target_group_arn = aws_lb_target_group.lb_target_group_frontend.arn
-    container_name   = "${var.project_name}-frontend"
+    target_group_arn = aws_lb_target_group.lb_target_group_frontend_prod.arn
+    container_name   = "${var.project_name}-frontend-prod"
     container_port   = var.app_port
   }
 
@@ -141,11 +180,11 @@ resource "aws_ecs_service" "ecs_service_frontend" {
 
 # Test Service
 resource "aws_ecs_service" "ecs_service_frontend_test" {
-  depends_on      = [aws_ecs_cluster.ecs_cluster, aws_subnet.private_subnet, aws_lb_target_group.lb_target_group_frontend]
+  depends_on      = [aws_ecs_cluster.ecs_cluster, aws_subnet.private_subnet, aws_lb_target_group.lb_target_group_frontend_test]
   name            = "${var.project_name}-frontend-test"
   cluster         = aws_ecs_cluster.ecs_cluster.id
   desired_count   = 0
-  task_definition = aws_ecs_task_definition.ecs_task_def_frontend.arn
+  task_definition = aws_ecs_task_definition.ecs_task_def_frontend_test.arn
   launch_type     = "FARGATE"
 
   network_configuration {
@@ -160,7 +199,7 @@ resource "aws_ecs_service" "ecs_service_frontend_test" {
 
   load_balancer {
     target_group_arn = aws_lb_target_group.lb_target_group_frontend_test.arn
-    container_name   = "${var.project_name}-frontend"
+    container_name   = "${var.project_name}-frontend-test"
     container_port   = var.app_port
   }
 
@@ -182,10 +221,10 @@ resource "aws_lb" "lb_frontend" {
   security_groups    = "${var.domain_name}" == "" ? [aws_security_group.alb_sg_frontend_no_cert.id] : [aws_security_group.alb_sg_frontend.id]
 }
 
-# TG
-resource "aws_lb_target_group" "lb_target_group_frontend" {
+# Prod TG
+resource "aws_lb_target_group" "lb_target_group_frontend_prod" {
   depends_on  = [aws_vpc.vpc]
-  name        = "${var.project_name}-frontend"
+  name        = "${var.project_name}-frontend-prod"
   target_type = "ip"
   port        = var.app_port
   protocol    = "HTTP"
@@ -204,7 +243,7 @@ resource "aws_lb_target_group" "lb_target_group_frontend" {
   }
 }
 
-# TG Test
+# Test TG
 resource "aws_lb_target_group" "lb_target_group_frontend_test" {
   depends_on  = [aws_vpc.vpc]
   name        = "${var.project_name}-frontend-test"
@@ -270,14 +309,14 @@ resource "aws_route53_record" "app_record_www" {
 
 resource "aws_lb_listener" "lb_listener_frontend_secure" {
   count             = "${var.domain_name}" == "" ? 0 : 1
-  depends_on        = [aws_lb_target_group.lb_target_group_frontend]
+  depends_on        = [aws_lb_target_group.lb_target_group_frontend_prod]
   port              = 443
   protocol          = "HTTPS"
   load_balancer_arn = aws_lb.lb_frontend.arn
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.lb_target_group_frontend.arn
+    target_group_arn = aws_lb_target_group.lb_target_group_frontend_prod.arn
   }
 
   certificate_arn = data.aws_acm_certificate.app_certificate[0].arn
@@ -331,7 +370,7 @@ resource "aws_lb_listener" "lb_listener_frontend_no_cert" {
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.lb_target_group_frontend.arn
+    target_group_arn = aws_lb_target_group.lb_target_group_frontend_prod.arn
   }
 }
 

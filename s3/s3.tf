@@ -21,6 +21,29 @@ resource "aws_s3_bucket_public_access_block" "logs_public_access_block" {
   ignore_public_acls      = true
   restrict_public_buckets = true
 }
+resource "aws_s3_bucket_policy" "app_logs_block_http" {
+  bucket = aws_s3_bucket.app_logs_bucket.id
+  policy = data.aws_iam_policy_document.app_logs_bucket_policy_doc.json
+}
+data "aws_iam_policy_document" "app_logs_bucket_policy_doc" {
+  statement {
+    effect = "Deny"
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    actions = ["s3:*"]
+    resources = [
+      aws_s3_bucket.app_logs_bucket.arn,
+      "${aws_s3_bucket.app_logs_bucket.arn}/*"
+    ]
+    condition {
+      test     = "Bool"
+      variable = "AWS:SecureTransport"
+      values   = ["false"]
+    }
+  }
+}
 
 # S3
 resource "aws_s3_bucket" "app_bucket" {

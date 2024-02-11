@@ -7,6 +7,7 @@ on:
       - "hotfix/**"
     paths:
       - "ecs/**"
+      - ".github/workflows/check-terraform-ecs.yml"
   workflow_dispatch:
 jobs:
   check-terraform:

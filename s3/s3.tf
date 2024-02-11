@@ -22,11 +22,6 @@ resource "aws_s3_bucket_public_access_block" "logs_public_access_block" {
   restrict_public_buckets = true
 }
 
-# resource "aws_s3_bucket_acl" "app_logs_acl" {
-#   bucket = aws_s3_bucket.app_logs_bucket.id
-#   acl = "private"
-# }
-
 # S3
 resource "aws_s3_bucket" "app_bucket" {
   bucket = "${var.project_name}"
@@ -36,9 +31,7 @@ resource "aws_s3_bucket_logging" "app_logging" {
   target_bucket = aws_s3_bucket.app_logs_bucket.bucket
   target_prefix = "s3"
 }
-# resource "aws_s3_bucket_website_configuration" "app_website_config" {
-#   bucket = aws_s3_bucket.app_bucket.bucket
-# }
+
 resource "aws_s3_bucket_public_access_block" "app_public_access_block" {
   bucket                  = aws_s3_bucket.app_bucket.id
   block_public_acls       = true

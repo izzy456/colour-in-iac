@@ -15,11 +15,9 @@ resource "aws_vpc_dhcp_options" "dhcp_options" {
 
 # IGW
 resource "aws_internet_gateway" "internet_gateway" {
-  depends_on = [aws_vpc.vpc]
 }
 
 resource "aws_internet_gateway_attachment" "internet_gateway_attachment" {
-  depends_on          = [aws_internet_gateway.internet_gateway]
   internet_gateway_id = aws_internet_gateway.internet_gateway.id
   vpc_id              = aws_vpc.vpc.id
 }
@@ -28,13 +26,11 @@ resource "aws_internet_gateway_attachment" "internet_gateway_attachment" {
 
 # Public Route Table
 resource "aws_route_table" "public_route_table" {
-  depends_on = [aws_vpc.vpc]
   vpc_id     = aws_vpc.vpc.id
 }
 
 # Public Route (through IGW)
 resource "aws_route" "public_route" {
-  depends_on             = [aws_route_table.public_route_table, aws_internet_gateway_attachment.internet_gateway_attachment]
   route_table_id         = aws_route_table.public_route_table.id
   destination_cidr_block = "0.0.0.0/0"
   gateway_id             = aws_internet_gateway.internet_gateway.id
@@ -46,7 +42,6 @@ data "aws_availability_zones" "azs" {
 
 # Public Subnets
 resource "aws_subnet" "public_subnet" {
-  depends_on        = [aws_route_table.public_route_table]
   count             = min(length(data.aws_availability_zones.azs.names), 3)
   vpc_id            = aws_vpc.vpc.id
   cidr_block        = "10.0.${count.index + 1}.0/24"
@@ -54,7 +49,6 @@ resource "aws_subnet" "public_subnet" {
 }
 
 resource "aws_route_table_association" "public_subnet_rt_assoc" {
-  depends_on     = [aws_subnet.public_subnet]
   count          = length(aws_subnet.public_subnet.*.id)
   subnet_id      = element(aws_subnet.public_subnet.*.id, count.index)
   route_table_id = aws_route_table.public_route_table.id
@@ -64,13 +58,11 @@ resource "aws_route_table_association" "public_subnet_rt_assoc" {
 
 # Private Route Table
 resource "aws_route_table" "private_route_table" {
-  depends_on = [aws_vpc.vpc]
   vpc_id     = aws_vpc.vpc.id
 }
 
 # SG for VPC Endpoints
 resource "aws_security_group" "vpc_endpoints_sg" {
-  depends_on  = [aws_security_group.service_sg_frontend, aws_security_group.service_sg_backend]
   name        = "${var.project_name}-vpc-endpoints-sg"
   description = "VPC endpoints SG"
   vpc_id      = aws_vpc.vpc.id
@@ -92,7 +84,6 @@ resource "aws_security_group" "vpc_endpoints_sg" {
 
 # VPC Endpoint for ECR API
 resource "aws_vpc_endpoint" "ecr_api_vpc_endpoint" {
-  depends_on          = [aws_subnet.private_subnet, aws_subnet.private_subnet]
   vpc_id              = aws_vpc.vpc.id
   service_name        = "com.amazonaws.${var.region}.ecr.api"
   vpc_endpoint_type   = "Interface"
@@ -103,7 +94,6 @@ resource "aws_vpc_endpoint" "ecr_api_vpc_endpoint" {
 
 # VPC Endpoint for ECR docker registry API
 resource "aws_vpc_endpoint" "ecr_dkr_vpc_endpoint" {
-  depends_on          = [aws_subnet.private_subnet]
   vpc_id              = aws_vpc.vpc.id
   service_name        = "com.amazonaws.${var.region}.ecr.dkr"
   vpc_endpoint_type   = "Interface"
@@ -114,7 +104,6 @@ resource "aws_vpc_endpoint" "ecr_dkr_vpc_endpoint" {
 
 # VPC Endpoint for ECR S3
 resource "aws_vpc_endpoint" "ecr_s3_vpc_endpoint" {
-  depends_on        = [aws_route_table.private_route_table]
   vpc_id            = aws_vpc.vpc.id
   service_name      = "com.amazonaws.${var.region}.s3"
   vpc_endpoint_type = "Gateway"
@@ -123,7 +112,6 @@ resource "aws_vpc_endpoint" "ecr_s3_vpc_endpoint" {
 
 # VPC Endpoint for CloudWatch Logs
 resource "aws_vpc_endpoint" "ecr_cloudwatch_vpc_endpoint" {
-  depends_on          = [aws_subnet.private_subnet]
   vpc_id              = aws_vpc.vpc.id
   service_name        = "com.amazonaws.${var.region}.logs"
   vpc_endpoint_type   = "Interface"
@@ -134,7 +122,6 @@ resource "aws_vpc_endpoint" "ecr_cloudwatch_vpc_endpoint" {
 
 # Private Subnets
 resource "aws_subnet" "private_subnet" {
-  depends_on        = [aws_route_table.private_route_table, aws_subnet.public_subnet]
   count             = min(length(data.aws_availability_zones.azs.names), 3)
   vpc_id            = aws_vpc.vpc.id
   cidr_block        = "10.0.${length(aws_subnet.public_subnet.*.id) + count.index + 1}.0/24"
@@ -142,7 +129,6 @@ resource "aws_subnet" "private_subnet" {
 }
 
 resource "aws_route_table_association" "private_subnet_rt_assoc" {
-  depends_on     = [aws_subnet.private_subnet]
   count          = length(aws_subnet.private_subnet.*.id)
   subnet_id      = element(aws_subnet.private_subnet.*.id, count.index)
   route_table_id = aws_route_table.private_route_table.id

@@ -10,10 +10,10 @@ jobs:
       contents: read
     uses: izzy456/colour-in-workflows/.github/workflows/terraform-drift-check.yml@main
     with:
-      branch: ${{ github.ref_name }}
+      branch: "main"
       project-name: s3
       aws-region: ${{ vars.AWS_REGION }}
       copy-args: "-r ../common/."
-      tf-vars: "domain_name=${{ vars.DOMAIN_NAME }} region=${{ vars.AWS_REGION }}"
+      tf-vars: domain_name=${{ vars.DOMAIN_NAME }} region=${{ vars.AWS_REGION }}
     secrets:
       aws-role: ${{ secrets.AWS_ROLE }}

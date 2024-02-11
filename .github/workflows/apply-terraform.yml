@@ -24,6 +24,6 @@ jobs:
       project-name: ${{ inputs.stack }}
       aws-region: ${{ vars.AWS_REGION }}
       copy-args: "-r ../common/."
-      tf-vars: domain_name="${{ inputs.stack=='s3' && vars.DOMAIN_NAME || '' }}" region=${{ vars.AWS_REGION }}
+      tf-vars: ${{ inputs.stack=='s3' && format('region={0} domain_name={1}', vars.AWS_REGION, vars.DOMAIN_NAME) || format('region={0}', vars.AWS_REGION) }}
     secrets:
       aws-role: ${{ secrets.AWS_ROLE }}

@@ -1,5 +1,5 @@
 provider "aws" {
-  alias = "us-east-1"
+  alias  = "us-east-1"
   region = "us-east-1"
 
   default_tags {
@@ -24,7 +24,7 @@ resource "aws_s3_bucket_public_access_block" "logs_public_access_block" {
 
 # S3
 resource "aws_s3_bucket" "app_bucket" {
-  bucket = "${var.project_name}"
+  bucket = var.project_name
 }
 resource "aws_s3_bucket_logging" "app_logging" {
   bucket        = aws_s3_bucket.app_bucket.bucket
@@ -76,8 +76,8 @@ data "aws_cloudfront_cache_policy" "caching_optimized_policy" {
   name  = "Managed-CachingOptimized"
 }
 data "aws_acm_certificate" "app_certificate" {
-  count  = "${var.domain_name}" == "" ? 0 : 1
-  domain = var.domain_name
+  count    = "${var.domain_name}" == "" ? 0 : 1
+  domain   = var.domain_name
   provider = aws.us-east-1
 }
 # CloudFront Distribution
@@ -91,7 +91,7 @@ resource "aws_cloudfront_distribution" "app_cf_distribution" {
   enabled             = true
   default_root_object = "index.html"
   price_class         = "PriceClass_All"
-  aliases = ["colourin.app", "www.colourin.app"]
+  aliases             = ["${var.domain_name}", "www.${var.domain_name}"]
 
   logging_config {
     include_cookies = false
@@ -105,7 +105,7 @@ resource "aws_cloudfront_distribution" "app_cf_distribution" {
     cached_methods         = ["GET", "HEAD"]
     target_origin_id       = aws_s3_bucket.app_bucket.bucket
     viewer_protocol_policy = "redirect-to-https"
-    compress = true
+    compress               = true
   }
 
   restrictions {
@@ -115,8 +115,8 @@ resource "aws_cloudfront_distribution" "app_cf_distribution" {
   }
 
   viewer_certificate {
-    acm_certificate_arn = data.aws_acm_certificate.app_certificate[0].arn
-    ssl_support_method = "sni-only"
+    acm_certificate_arn      = data.aws_acm_certificate.app_certificate[0].arn
+    ssl_support_method       = "sni-only"
     minimum_protocol_version = "TLSv1.2_2021"
   }
 }

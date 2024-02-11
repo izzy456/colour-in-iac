@@ -272,10 +272,10 @@ data "aws_route53_zone" "project_hosted_zone" {
 }
 
 resource "aws_route53_record" "app_record" {
-  count      = "${var.domain_name}" == "" ? 0 : 1
-  zone_id    = data.aws_route53_zone.project_hosted_zone[0].zone_id
-  name       = var.domain_name
-  type       = "A"
+  count   = "${var.domain_name}" == "" ? 0 : 1
+  zone_id = data.aws_route53_zone.project_hosted_zone[0].zone_id
+  name    = var.domain_name
+  type    = "A"
 
   alias {
     name                   = aws_lb.lb_frontend.dns_name
@@ -285,10 +285,10 @@ resource "aws_route53_record" "app_record" {
 }
 
 resource "aws_route53_record" "app_record_www" {
-  count      = "${var.domain_name}" == "" ? 0 : 1
-  zone_id    = data.aws_route53_zone.project_hosted_zone[0].zone_id
-  name       = "www.${var.domain_name}"
-  type       = "A"
+  count   = "${var.domain_name}" == "" ? 0 : 1
+  zone_id = data.aws_route53_zone.project_hosted_zone[0].zone_id
+  name    = "www.${var.domain_name}"
+  type    = "A"
 
   alias {
     name                   = aws_lb.lb_frontend.dns_name

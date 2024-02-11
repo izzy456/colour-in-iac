@@ -22,5 +22,5 @@ jobs:
       tf-vars: "region=${{ vars.AWS_REGION }}"
     secrets:
       aws-role: ${{ secrets.AWS_ROLE }}
-      sonar-token: ${{ secrets.SONAR_TOKEN }}
+      sonar-token: ${{ secrets.SONAR_TOKEN_ECS }}
       sonar-host-url: ${{ secrets.SONAR_HOST_URL }}

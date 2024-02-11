@@ -1,5 +1,5 @@
 provider "aws" {
-  alias = "us-east-1"
+  alias  = "us-east-1"
   region = "us-east-1"
 
   default_tags {
@@ -21,24 +21,40 @@ resource "aws_s3_bucket_public_access_block" "logs_public_access_block" {
   ignore_public_acls      = true
   restrict_public_buckets = true
 }
-
-# resource "aws_s3_bucket_acl" "app_logs_acl" {
-#   bucket = aws_s3_bucket.app_logs_bucket.id
-#   acl = "private"
-# }
+resource "aws_s3_bucket_policy" "app_logs_block_http" {
+  bucket = aws_s3_bucket.app_logs_bucket.id
+  policy = data.aws_iam_policy_document.app_logs_bucket_policy_doc.json
+}
+data "aws_iam_policy_document" "app_logs_bucket_policy_doc" {
+  statement {
+    effect = "Deny"
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    actions = ["s3:*"]
+    resources = [
+      aws_s3_bucket.app_logs_bucket.arn,
+      "${aws_s3_bucket.app_logs_bucket.arn}/*"
+    ]
+    condition {
+      test     = "Bool"
+      variable = "AWS:SecureTransport"
+      values   = ["false"]
+    }
+  }
+}
 
 # S3
 resource "aws_s3_bucket" "app_bucket" {
-  bucket = "${var.project_name}"
+  bucket = var.project_name
 }
 resource "aws_s3_bucket_logging" "app_logging" {
   bucket        = aws_s3_bucket.app_bucket.bucket
   target_bucket = aws_s3_bucket.app_logs_bucket.bucket
   target_prefix = "s3"
 }
-# resource "aws_s3_bucket_website_configuration" "app_website_config" {
-#   bucket = aws_s3_bucket.app_bucket.bucket
-# }
+
 resource "aws_s3_bucket_public_access_block" "app_public_access_block" {
   bucket                  = aws_s3_bucket.app_bucket.id
   block_public_acls       = true
@@ -83,8 +99,8 @@ data "aws_cloudfront_cache_policy" "caching_optimized_policy" {
   name  = "Managed-CachingOptimized"
 }
 data "aws_acm_certificate" "app_certificate" {
-  count  = "${var.domain_name}" == "" ? 0 : 1
-  domain = var.domain_name
+  count    = "${var.domain_name}" == "" ? 0 : 1
+  domain   = var.domain_name
   provider = aws.us-east-1
 }
 # CloudFront Distribution
@@ -98,7 +114,7 @@ resource "aws_cloudfront_distribution" "app_cf_distribution" {
   enabled             = true
   default_root_object = "index.html"
   price_class         = "PriceClass_All"
-  aliases = ["colourin.app", "www.colourin.app"]
+  aliases             = ["${var.domain_name}", "www.${var.domain_name}"]
 
   logging_config {
     include_cookies = false
@@ -112,7 +128,7 @@ resource "aws_cloudfront_distribution" "app_cf_distribution" {
     cached_methods         = ["GET", "HEAD"]
     target_origin_id       = aws_s3_bucket.app_bucket.bucket
     viewer_protocol_policy = "redirect-to-https"
-    compress = true
+    compress               = true
   }
 
   restrictions {
@@ -122,8 +138,8 @@ resource "aws_cloudfront_distribution" "app_cf_distribution" {
   }
 
   viewer_certificate {
-    acm_certificate_arn = data.aws_acm_certificate.app_certificate[0].arn
-    ssl_support_method = "sni-only"
+    acm_certificate_arn      = data.aws_acm_certificate.app_certificate[0].arn
+    ssl_support_method       = "sni-only"
     minimum_protocol_version = "TLSv1.2_2021"
   }
 }

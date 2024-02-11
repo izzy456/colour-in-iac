@@ -1,6 +1,5 @@
 # SG for frontend ALB (public)
 resource "aws_security_group" "alb_sg_frontend" {
-  depends_on  = [aws_vpc.vpc]
   name        = "${var.project_name}-frontend-alb-sg"
   description = "ALB SG frontend"
   vpc_id      = aws_vpc.vpc.id
@@ -28,7 +27,6 @@ resource "aws_security_group" "alb_sg_frontend" {
 }
 
 resource "aws_security_group" "alb_sg_frontend_no_cert" {
-  depends_on  = [aws_vpc.vpc]
   name        = "${var.project_name}-frontend-alb-sg-no-cert"
   description = "ALB SG frontend no cert"
   vpc_id      = aws_vpc.vpc.id
@@ -50,15 +48,14 @@ resource "aws_security_group" "alb_sg_frontend_no_cert" {
 
 # SG for frontend service
 resource "aws_security_group" "service_sg_frontend" {
-  depends_on  = [aws_security_group.alb_sg_frontend]
   name        = "${var.project_name}-frontend-ecs-sg"
   description = "ECS SG frontend"
   vpc_id      = aws_vpc.vpc.id
 
   ingress {
-    description     = "Allow ALB to frontend ECS on port ${var.app_port}"
-    from_port       = var.app_port
-    to_port         = var.app_port
+    description     = "Allow ALB to frontend ECS on port 8080"
+    from_port       = 8080
+    to_port         = 8080
     protocol        = "tcp"
     security_groups = "${var.domain_name}" == "" ? [aws_security_group.alb_sg_frontend_no_cert.id] : [aws_security_group.alb_sg_frontend.id]
   }
@@ -86,10 +83,10 @@ resource "aws_ecs_task_definition" "ecs_task_def_frontend_prod" {
       cpu       = 256
       memory    = 512
       essential = true
-      command   = ["-p", "${var.app_port}:80"]
+      command   = ["-p", "8080:80"]
       portMappings = [
         {
-          containerPort = var.app_port
+          containerPort = 8080
         }
       ]
       logConfiguration = {
@@ -125,10 +122,10 @@ resource "aws_ecs_task_definition" "ecs_task_def_frontend_test" {
       cpu       = 256
       memory    = 512
       essential = true
-      command   = ["-p", "${var.app_port}:80"]
+      command   = ["-p", "8080:80"]
       portMappings = [
         {
-          containerPort = var.app_port
+          containerPort = 8080
         }
       ]
       logConfiguration = {
@@ -150,7 +147,6 @@ resource "aws_ecs_task_definition" "ecs_task_def_frontend_test" {
 
 # Prod Service
 resource "aws_ecs_service" "ecs_service_frontend_prod" {
-  depends_on      = [aws_ecs_cluster.ecs_cluster, aws_subnet.private_subnet, aws_lb_target_group.lb_target_group_frontend_prod]
   name            = "${var.project_name}-frontend-prod"
   cluster         = aws_ecs_cluster.ecs_cluster.id
   desired_count   = 0
@@ -170,7 +166,7 @@ resource "aws_ecs_service" "ecs_service_frontend_prod" {
   load_balancer {
     target_group_arn = aws_lb_target_group.lb_target_group_frontend_prod.arn
     container_name   = "${var.project_name}-frontend-prod"
-    container_port   = var.app_port
+    container_port   = 8080
   }
 
   lifecycle {
@@ -180,7 +176,6 @@ resource "aws_ecs_service" "ecs_service_frontend_prod" {
 
 # Test Service
 resource "aws_ecs_service" "ecs_service_frontend_test" {
-  depends_on      = [aws_ecs_cluster.ecs_cluster, aws_subnet.private_subnet, aws_lb_target_group.lb_target_group_frontend_test]
   name            = "${var.project_name}-frontend-test"
   cluster         = aws_ecs_cluster.ecs_cluster.id
   desired_count   = 0
@@ -200,7 +195,7 @@ resource "aws_ecs_service" "ecs_service_frontend_test" {
   load_balancer {
     target_group_arn = aws_lb_target_group.lb_target_group_frontend_test.arn
     container_name   = "${var.project_name}-frontend-test"
-    container_port   = var.app_port
+    container_port   = 8080
   }
 
   lifecycle {
@@ -214,7 +209,6 @@ resource "aws_ecs_service" "ecs_service_frontend_test" {
 
 # LB
 resource "aws_lb" "lb_frontend" {
-  depends_on         = [aws_subnet.public_subnet]
   name               = "${var.project_name}-frontend-lb"
   load_balancer_type = "application"
   subnets            = aws_subnet.public_subnet.*.id
@@ -223,10 +217,9 @@ resource "aws_lb" "lb_frontend" {
 
 # Prod TG
 resource "aws_lb_target_group" "lb_target_group_frontend_prod" {
-  depends_on  = [aws_vpc.vpc]
   name        = "${var.project_name}-frontend-prod"
   target_type = "ip"
-  port        = var.app_port
+  port        = 8080
   protocol    = "HTTP"
   vpc_id      = aws_vpc.vpc.id
 
@@ -236,7 +229,7 @@ resource "aws_lb_target_group" "lb_target_group_frontend_prod" {
     interval            = 30
     matcher             = 200
     path                = "/"
-    port                = var.app_port
+    port                = 8080
     protocol            = "HTTP"
     timeout             = 6
     unhealthy_threshold = 3
@@ -245,10 +238,9 @@ resource "aws_lb_target_group" "lb_target_group_frontend_prod" {
 
 # Test TG
 resource "aws_lb_target_group" "lb_target_group_frontend_test" {
-  depends_on  = [aws_vpc.vpc]
   name        = "${var.project_name}-frontend-test"
   target_type = "ip"
-  port        = var.app_port
+  port        = 8080
   protocol    = "HTTP"
   vpc_id      = aws_vpc.vpc.id
 
@@ -258,7 +250,7 @@ resource "aws_lb_target_group" "lb_target_group_frontend_test" {
     interval            = 30
     matcher             = 200
     path                = "/"
-    port                = var.app_port
+    port                = 8080
     protocol            = "HTTP"
     timeout             = 6
     unhealthy_threshold = 3
@@ -280,11 +272,10 @@ data "aws_route53_zone" "project_hosted_zone" {
 }
 
 resource "aws_route53_record" "app_record" {
-  depends_on = [aws_lb.lb_frontend]
-  count      = "${var.domain_name}" == "" ? 0 : 1
-  zone_id    = data.aws_route53_zone.project_hosted_zone[0].zone_id
-  name       = var.domain_name
-  type       = "A"
+  count   = "${var.domain_name}" == "" ? 0 : 1
+  zone_id = data.aws_route53_zone.project_hosted_zone[0].zone_id
+  name    = var.domain_name
+  type    = "A"
 
   alias {
     name                   = aws_lb.lb_frontend.dns_name
@@ -294,11 +285,10 @@ resource "aws_route53_record" "app_record" {
 }
 
 resource "aws_route53_record" "app_record_www" {
-  depends_on = [aws_lb.lb_frontend]
-  count      = "${var.domain_name}" == "" ? 0 : 1
-  zone_id    = data.aws_route53_zone.project_hosted_zone[0].zone_id
-  name       = "www.${var.domain_name}"
-  type       = "A"
+  count   = "${var.domain_name}" == "" ? 0 : 1
+  zone_id = data.aws_route53_zone.project_hosted_zone[0].zone_id
+  name    = "www.${var.domain_name}"
+  type    = "A"
 
   alias {
     name                   = aws_lb.lb_frontend.dns_name
@@ -309,7 +299,6 @@ resource "aws_route53_record" "app_record_www" {
 
 resource "aws_lb_listener" "lb_listener_frontend_secure" {
   count             = "${var.domain_name}" == "" ? 0 : 1
-  depends_on        = [aws_lb_target_group.lb_target_group_frontend_prod]
   port              = 443
   protocol          = "HTTPS"
   load_balancer_arn = aws_lb.lb_frontend.arn
@@ -346,7 +335,6 @@ resource "aws_lb_listener_rule" "listener_rule_experimental" {
 
 resource "aws_lb_listener" "lb_listener_frontend" {
   count             = "${var.domain_name}" == "" ? 0 : 1
-  depends_on        = [aws_lb.lb_frontend]
   port              = 80
   protocol          = "HTTP"
   load_balancer_arn = aws_lb.lb_frontend.arn
@@ -363,7 +351,6 @@ resource "aws_lb_listener" "lb_listener_frontend" {
 
 resource "aws_lb_listener" "lb_listener_frontend_no_cert" {
   count             = "${var.domain_name}" == "" ? 1 : 0
-  depends_on        = [aws_lb.lb_frontend]
   port              = 80
   protocol          = "HTTP"
   load_balancer_arn = aws_lb.lb_frontend.arn

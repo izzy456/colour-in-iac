@@ -1,4 +1,4 @@
-name: Apply Terraform Templates - ecs
+name: Apply Terraform Templates
 on:
   workflow_dispatch:
     inputs:
@@ -6,40 +6,24 @@ on:
         description: "The domain name of the web app (e.g. example.com, requires setup of ACM cert for this domain and www. subdomain as well as Hosted Zone)"
         required: false
         default: ""
+      stack:
+        description: "Select a stack"
+        type: choice
+        options:
+          - "s3"
+          - "ecs"
+        default: "s3"
 jobs:
-  tf_apply:
-    name: Apply Terraform Templates - ecs
-    runs-on: ubuntu-latest
+  apply-terraform:
     permissions:
       id-token: write
       contents: read
-    defaults:
-      run:
-        shell: bash
-        working-directory: ./ecs
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE }}
-          aws-region: ${{ vars.AWS_REGION }}
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-
-      - name: Copy in common templates
-        run: cp -r ../common/. .
-
-      - name: Terraform Init
-        run: terraform init -backend-config="key=ecs" -backend-config="region=${{ vars.AWS_REGION }}"
-    
-      - name: Terraform Apply - no domain name
-        if: ${{ inputs.domain_name == '' }}
-        run: terraform apply -var "region=${{ vars.AWS_REGION }}" -auto-approve
-    
-      - name: Terraform Apply
-        if: ${{ inputs.domain_name != '' }}
-        run: terraform apply -var "region=${{ vars.AWS_REGION }}" -var "domain_name=${{ inputs.domain_name }}" -auto-approve
+    uses: izzy456/colour-in-workflows/.github/workflows/apply-terraform.yml@main
+    with:
+      branch: ${{ github.ref_name }}
+      project-name: ${{ inputs.stack }}
+      aws-region: ${{ vars.AWS_REGION }}
+      copy-args: "-r ../common/."
+      tf-vars: domain_name=${{ inputs.stack=='s3' && vars.DOMAIN_NAME || '' }} region=${{ vars.AWS_REGION }}"
+    secrets:
+      aws-role: ${{ secrets.AWS_ROLE }}

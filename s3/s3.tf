@@ -175,3 +175,39 @@ resource "aws_route53_record" "app_record_www" {
     evaluate_target_health = false
   }
 }
+
+# Test
+resource "aws_s3_bucket" "app_test_bucket" {
+  bucket = "${var.project_name}-test"
+}
+
+resource "aws_s3_bucket_public_access_block" "test_public_access_block" {
+  bucket                  = aws_s3_bucket.app_test_bucket.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+resource "aws_s3_bucket_policy" "app_test_block_http" {
+  bucket = aws_s3_bucket.app_test_bucket.id
+  policy = data.aws_iam_policy_document.app_test_bucket_policy_doc.json
+}
+data "aws_iam_policy_document" "app_test_bucket_policy_doc" {
+  statement {
+    effect = "Deny"
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    actions = ["s3:*"]
+    resources = [
+      aws_s3_bucket.app_test_bucket.arn,
+      "${aws_s3_bucket.app_test_bucket.arn}/*"
+    ]
+    condition {
+      test     = "Bool"
+      variable = "AWS:SecureTransport"
+      values   = ["false"]
+    }
+  }
+}

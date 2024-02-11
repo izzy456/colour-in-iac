@@ -7,8 +7,6 @@ on:
       - "hotfix/**"
     paths:
       - "s3/**"
-    paths-ignore:
-      - "**.md"
   workflow_dispatch:
 jobs:
   check-terraform:

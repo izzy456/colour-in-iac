@@ -324,7 +324,7 @@ resource "aws_lb_listener_rule" "listener_rule_experimental" {
 
   condition {
     path_pattern {
-      values = ["/experimental"]
+      values = ["/experimental*"]
     }
   }
 
@@ -373,7 +373,7 @@ resource "aws_lb_listener_rule" "listener_rule_experimental_no_cert" {
 
   condition {
     path_pattern {
-      values = ["/experimental"]
+      values = ["/experimental*"]
     }
   }
 

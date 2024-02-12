@@ -159,7 +159,7 @@ resource "aws_ecs_service" "ecs_service_backend_test" {
   name            = "${var.project_name}-backend-test"
   cluster         = aws_ecs_cluster.ecs_cluster.id
   desired_count   = 0
-  task_definition = aws_ecs_task_definition.ecs_task_def_backend_prod.arn
+  task_definition = aws_ecs_task_definition.ecs_task_def_backend_test.arn
   launch_type     = "FARGATE"
 
   network_configuration {

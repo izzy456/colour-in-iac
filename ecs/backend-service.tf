@@ -86,6 +86,45 @@ resource "aws_ecs_task_definition" "ecs_task_def_backend" {
   }
 }
 
+# Test Task
+resource "aws_ecs_task_definition" "ecs_task_def_backend_test" {
+  family                   = "${var.project_name}-backend-test"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = 256
+  memory                   = 512
+  execution_role_arn       = data.aws_iam_role.ecs_execution_role.arn
+  network_mode             = "awsvpc"
+
+  container_definitions = jsonencode([
+    {
+      name      = "${var.project_name}-backend-test"
+      image     = "public.ecr.aws/nginx/nginx:stable-perl"
+      cpu       = 256
+      memory    = 512
+      essential = true
+      command   = ["-p", "8080:80"]
+      portMappings = [
+        {
+          containerPort = 8080
+        }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-create-group  = "true",
+          awslogs-group         = aws_cloudwatch_log_group.ecs_logs.name,
+          awslogs-region        = var.region,
+          awslogs-stream-prefix = "ecs-backend-test"
+        }
+      }
+    }
+  ])
+
+  lifecycle {
+    ignore_changes = all
+  }
+}
+
 # Prod Service
 resource "aws_ecs_service" "ecs_service_backend_prod" {
   name            = "${var.project_name}-backend-prod"
@@ -115,12 +154,12 @@ resource "aws_ecs_service" "ecs_service_backend_prod" {
   }
 }
 
-# Service Test
+# Test Service
 resource "aws_ecs_service" "ecs_service_backend_test" {
   name            = "${var.project_name}-backend-test"
   cluster         = aws_ecs_cluster.ecs_cluster.id
   desired_count   = 0
-  task_definition = aws_ecs_task_definition.ecs_task_def_backend.arn
+  task_definition = aws_ecs_task_definition.ecs_task_def_backend_test.arn
   launch_type     = "FARGATE"
 
   network_configuration {

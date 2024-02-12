@@ -47,9 +47,9 @@ resource "aws_security_group" "service_sg_backend" {
   }
 }
 
-# Task
-resource "aws_ecs_task_definition" "ecs_task_def_backend" {
-  family                   = "${var.project_name}-backend"
+# Prod Task
+resource "aws_ecs_task_definition" "ecs_task_def_backend_prod" {
+  family                   = "${var.project_name}-backend-prod"
   requires_compatibilities = ["FARGATE"]
   cpu                      = 256
   memory                   = 512
@@ -58,7 +58,7 @@ resource "aws_ecs_task_definition" "ecs_task_def_backend" {
 
   container_definitions = jsonencode([
     {
-      name      = "${var.project_name}-backend"
+      name      = "${var.project_name}-backend-prod"
       image     = "public.ecr.aws/nginx/nginx:stable-perl"
       cpu       = 256
       memory    = 512
@@ -130,7 +130,7 @@ resource "aws_ecs_service" "ecs_service_backend_prod" {
   name            = "${var.project_name}-backend-prod"
   cluster         = aws_ecs_cluster.ecs_cluster.id
   desired_count   = 0
-  task_definition = aws_ecs_task_definition.ecs_task_def_backend.arn
+  task_definition = aws_ecs_task_definition.ecs_task_def_backend_prod.arn
   launch_type     = "FARGATE"
 
   network_configuration {
@@ -145,7 +145,7 @@ resource "aws_ecs_service" "ecs_service_backend_prod" {
 
   load_balancer {
     target_group_arn = aws_lb_target_group.lb_target_group_backend_prod.arn
-    container_name   = "${var.project_name}-backend"
+    container_name   = "${var.project_name}-backend-prod"
     container_port   = 8080
   }
 
@@ -159,7 +159,7 @@ resource "aws_ecs_service" "ecs_service_backend_test" {
   name            = "${var.project_name}-backend-test"
   cluster         = aws_ecs_cluster.ecs_cluster.id
   desired_count   = 0
-  task_definition = aws_ecs_task_definition.ecs_task_def_backend_test.arn
+  task_definition = aws_ecs_task_definition.ecs_task_def_backend_prod.arn
   launch_type     = "FARGATE"
 
   network_configuration {
@@ -174,7 +174,7 @@ resource "aws_ecs_service" "ecs_service_backend_test" {
 
   load_balancer {
     target_group_arn = aws_lb_target_group.lb_target_group_backend_test.arn
-    container_name   = "${var.project_name}-backend"
+    container_name   = "${var.project_name}-backend-test"
     container_port   = 8080
   }
 
